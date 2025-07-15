@@ -42,6 +42,9 @@ var currentDiscoveryClient *discovery.DiscoveryClient
 
 // CreateKubeClient creates a Kubernetes clientset and a custom resource clientset.
 func CreateKubeClient(apiserver string, kubeconfig string) (clientset.Interface, error) {
+	currentKubeClient = nil
+	config = nil
+
 	if currentKubeClient != nil {
 		return currentKubeClient, nil
 	}

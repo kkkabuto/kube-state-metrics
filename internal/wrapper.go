@@ -18,7 +18,10 @@ package internal
 
 import (
 	"context"
+	"crypto/md5"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -35,7 +38,13 @@ import (
 // RunKubeStateMetricsWrapper is a wrapper around KSM, delegated to the root command.
 func RunKubeStateMetricsWrapper(opts *options.Options) {
 
-	KSMRunOrDie := func(ctx context.Context) {
+	var (
+		KSMRunOrDie func(ctx context.Context)
+		ksmDone     chan struct{}
+	)
+
+	KSMRunOrDie = func(ctx context.Context) {
+		defer close(ksmDone)
 		if err := app.RunKubeStateMetricsWrapper(ctx, opts); err != nil {
 			klog.ErrorS(err, "Failed to run kube-state-metrics")
 			klog.FlushAndExit(klog.ExitFlushTimeout, 1)
@@ -43,6 +52,8 @@ func RunKubeStateMetricsWrapper(opts *options.Options) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	ksmDone = make(chan struct{})
+
 	if file := options.GetConfigFile(*opts); file != "" {
 		cfgViper := viper.New()
 		cfgViper.SetConfigType("yaml")
@@ -58,9 +69,11 @@ func RunKubeStateMetricsWrapper(opts *options.Options) {
 		cfgViper.OnConfigChange(func(e fsnotify.Event) {
 			klog.InfoS("Changes detected", "name", e.Name)
 			cancel()
+			<-ksmDone // 等待 KSM 完全退出
 			// Wait for the ports to be released.
 			<-time.After(3 * time.Second)
 			ctx, cancel = context.WithCancel(context.Background())
+			ksmDone = make(chan struct{})
 			go KSMRunOrDie(ctx)
 		})
 		cfgViper.WatchConfig()
@@ -88,36 +101,62 @@ func RunKubeStateMetricsWrapper(opts *options.Options) {
 		crcViper.OnConfigChange(func(e fsnotify.Event) {
 			klog.InfoS("Changes detected", "name", e.Name)
 			cancel()
-			// Wait for the ports to be released.
+			<-ksmDone // 等待 KSM 完全退出
 			<-time.After(3 * time.Second)
 			ctx, cancel = context.WithCancel(context.Background())
+			ksmDone = make(chan struct{})
 			go KSMRunOrDie(ctx)
 		})
 		crcViper.WatchConfig()
 	}
 	if opts.Kubeconfig != "" {
-		kubecfgViper := viper.New()
-		kubecfgViper.SetConfigType("yaml")
-		kubecfgViper.SetConfigFile(opts.Kubeconfig)
-		if err := kubecfgViper.ReadInConfig(); err != nil {
-			if errors.Is(err, viper.ConfigFileNotFoundError{}) {
-				klog.ErrorS(err, "kubeconfig file not found", "file", opts.Kubeconfig)
-			} else {
-				klog.ErrorS(err, "Error reading kubeconfig file", "file", opts.Kubeconfig)
+		lastMD5, _ := calculateMD5(opts.Kubeconfig)
+
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				select {
+				case <-ticker.C:
+					currentMD5, err := calculateMD5(opts.Kubeconfig)
+					if err != nil {
+						klog.ErrorS(err, "Failed to calculate MD5", "file", opts.Kubeconfig)
+						continue
+					}
+
+					if currentMD5 != lastMD5 {
+						klog.InfoS("File changed detected by MD5", "file", opts.Kubeconfig)
+						lastMD5 = currentMD5
+
+						cancel()
+						<-ksmDone
+						<-time.After(3 * time.Second)
+						ctx, cancel = context.WithCancel(context.Background())
+						ksmDone = make(chan struct{})
+						go KSMRunOrDie(ctx)
+					}
+
+				}
 			}
-			klog.FlushAndExit(klog.ExitFlushTimeout, 1)
-		}
-		kubecfgViper.OnConfigChange(func(e fsnotify.Event) {
-			klog.InfoS("Changes detected", "name", e.Name)
-			cancel()
-			// Wait for the ports to be released.
-			<-time.After(3 * time.Second)
-			ctx, cancel = context.WithCancel(context.Background())
-			go KSMRunOrDie(ctx)
-		})
-		kubecfgViper.WatchConfig()
+		}()
 	}
 	klog.InfoS("Starting kube-state-metrics")
-	KSMRunOrDie(ctx)
+	go KSMRunOrDie(ctx)
 	select {}
+}
+
+func calculateMD5(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hash := md5.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
 }
