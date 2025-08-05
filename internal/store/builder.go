@@ -39,6 +39,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/client-go/dynamic"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -330,6 +331,7 @@ var availableStores = map[string]func(f *Builder) []cache.Store{
 	"cronjobs":                        func(b *Builder) []cache.Store { return b.buildCronJobStores() },
 	"daemonsets":                      func(b *Builder) []cache.Store { return b.buildDaemonSetStores() },
 	"deployments":                     func(b *Builder) []cache.Store { return b.buildDeploymentStores() },
+	"elasticquotatrees":               func(b *Builder) []cache.Store { return b.buildElasticQuotaTreeStores() },
 	"endpoints":                       func(b *Builder) []cache.Store { return b.buildEndpointsStores() },
 	"endpointslices":                  func(b *Builder) []cache.Store { return b.buildEndpointSlicesStores() },
 	"horizontalpodautoscalers":        func(b *Builder) []cache.Store { return b.buildHPAStores() },
@@ -387,6 +389,13 @@ func (b *Builder) buildDaemonSetStores() []cache.Store {
 
 func (b *Builder) buildDeploymentStores() []cache.Store {
 	return b.buildStoresFunc(deploymentMetricFamilies(b.allowAnnotationsList["deployments"], b.allowLabelsList["deployments"]), &appsv1.Deployment{}, createDeploymentListWatch, b.useAPIServerCache, b.objectLimit)
+}
+
+func (b *Builder) buildElasticQuotaTreeStores() []cache.Store {
+	return b.buildCustomResourceStores("elasticquotatrees", elasticQuotaTreeMetricFamilies(b.allowAnnotationsList["elasticquotatrees"], b.allowLabelsList["elasticquotatrees"]), &unstructured.Unstructured{}, func(customResourceClient interface{}, ns string, fieldSelector string) cache.ListerWatcher {
+		dynamicClient := customResourceClient.(dynamic.Interface)
+		return createElasticQuotaTreeListWatch(dynamicClient, ns, fieldSelector)
+	}, b.useAPIServerCache, b.objectLimit)
 }
 
 func (b *Builder) buildEndpointsStores() []cache.Store {
