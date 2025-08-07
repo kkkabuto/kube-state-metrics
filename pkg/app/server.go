@@ -266,13 +266,23 @@ func RunKubeStateMetrics(ctx context.Context, opts *options.Options) error {
 	factories := []customresource.RegistryFactory{&store.ElasticQuotaTreeFactory{}}
 	customResourceClients := make(map[string]interface{}, len(factories))
 
-	// Create custom resource clients
+	// Create custom resource clients using the proper GVR string
 	for _, f := range factories {
 		customResourceClient, err := f.CreateClient(kubeConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create customResourceClient for %s: %v", f.Name(), err)
 		}
-		customResourceClients[f.Name()] = customResourceClient
+		gvr, err := util.GVRFromType(f.Name(), f.ExpectedType())
+		if err != nil {
+			return fmt.Errorf("failed to get GVR for %s: %v", f.Name(), err)
+		}
+		var gvrString string
+		if gvr != nil {
+			gvrString = gvr.String()
+		} else {
+			gvrString = f.Name()
+		}
+		customResourceClients[gvrString] = customResourceClient
 	}
 
 	// Register custom resource factories and clients
