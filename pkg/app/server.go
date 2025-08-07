@@ -54,6 +54,7 @@ import (
 	"k8s.io/kube-state-metrics/v2/internal/discovery"
 	"k8s.io/kube-state-metrics/v2/internal/store"
 	"k8s.io/kube-state-metrics/v2/pkg/allowdenylist"
+	"k8s.io/kube-state-metrics/v2/pkg/customresource"
 	"k8s.io/kube-state-metrics/v2/pkg/customresourcestate"
 	generator "k8s.io/kube-state-metrics/v2/pkg/metric_generator"
 	"k8s.io/kube-state-metrics/v2/pkg/metricshandler"
@@ -251,6 +252,7 @@ func RunKubeStateMetrics(ctx context.Context, opts *options.Options) error {
 	storeBuilder.WithUsingAPIServerCache(opts.UseAPIServerCache)
 	storeBuilder.WithObjectLimit(opts.ObjectLimit)
 	storeBuilder.WithGenerateStoresFunc(storeBuilder.DefaultGenerateStoresFunc())
+	storeBuilder.WithGenerateCustomResourceStoresFunc(storeBuilder.DefaultGenerateCustomResourceStoresFunc())
 	proc.StartReaper()
 
 	storeBuilder.WithUtilOptions(opts)
@@ -259,6 +261,23 @@ func RunKubeStateMetrics(ctx context.Context, opts *options.Options) error {
 		return fmt.Errorf("failed to create client: %v", err)
 	}
 	storeBuilder.WithKubeClient(kubeClient)
+
+	// Add custom resource factories and clients for ElasticQuotaTree
+	factories := []customresource.RegistryFactory{&store.ElasticQuotaTreeFactory{}}
+	customResourceClients := make(map[string]interface{}, len(factories))
+
+	// Create custom resource clients
+	for _, f := range factories {
+		customResourceClient, err := f.CreateClient(kubeConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create customResourceClient for %s: %v", f.Name(), err)
+		}
+		customResourceClients[f.Name()] = customResourceClient
+	}
+
+	// Register custom resource factories and clients
+	storeBuilder.WithCustomResourceStoreFactories(factories...)
+	storeBuilder.WithCustomResourceClients(customResourceClients)
 
 	storeBuilder.WithSharding(opts.Shard, opts.TotalShards)
 	if err := storeBuilder.WithAllowAnnotations(opts.AnnotationsAllowList); err != nil {
