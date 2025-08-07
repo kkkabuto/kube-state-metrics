@@ -19,11 +19,7 @@ package store
 import (
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/dynamic/fake"
-	"k8s.io/client-go/tools/cache"
 
 	"k8s.io/kube-state-metrics/v2/pkg/metric"
 )
@@ -109,30 +105,25 @@ func TestWrapElasticQuotaTreeFunc(t *testing.T) {
 	}
 }
 
-func TestCreateElasticQuotaTreeListWatch(t *testing.T) {
-	// 创建假的动态客户端
-	scheme := runtime.NewScheme()
-	dynamicClient := fake.NewSimpleDynamicClient(scheme)
+func TestElasticQuotaTreeFactory(t *testing.T) {
+	// 测试注册工厂
+	factory := &ElasticQuotaTreeFactory{}
 
-	// 测试 ListWatch 创建
-	listWatch := createElasticQuotaTreeListWatch(dynamicClient, "test-namespace", "")
-
-	if listWatch == nil {
-		t.Error("Expected non-nil ListWatch")
+	// 测试名称
+	if factory.Name() != "elasticquotatrees" {
+		t.Errorf("Expected name 'elasticquotatrees', got %s", factory.Name())
 	}
 
-	// 测试 List 函数 - 使用类型断言来访问 ListFunc
-	if listWatchFunc, ok := listWatch.(*cache.ListWatch); ok {
-		list, err := listWatchFunc.ListFunc(metav1.ListOptions{})
-		if err != nil {
-			t.Errorf("Expected no error from List, got %v", err)
-		}
+	// 测试期望类型
+	expectedType := factory.ExpectedType()
+	if expectedType == nil {
+		t.Error("Expected non-nil expected type")
+	}
 
-		if list == nil {
-			t.Error("Expected non-nil list result")
-		}
-	} else {
-		t.Error("Expected ListWatch to be of type *cache.ListWatch")
+	// 测试指标生成器
+	generators := factory.MetricFamilyGenerators()
+	if len(generators) == 0 {
+		t.Error("Expected non-empty metric family generators")
 	}
 }
 

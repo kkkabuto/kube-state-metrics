@@ -17,19 +17,12 @@ limitations under the License.
 package store
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/watch"
-	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/tools/cache"
 	basemetrics "k8s.io/component-base/metrics"
 
 	"k8s.io/kube-state-metrics/v2/pkg/metric"
@@ -284,27 +277,6 @@ func elasticQuotaTreeMetricFamilies(allowAnnotationsList, allowLabelsList []stri
 				return generateQueueNamespaceCountMetrics(e)
 			}),
 		),
-	}
-}
-
-func createElasticQuotaTreeListWatch(dynamicClient dynamic.Interface, ns string, fieldSelector string) cache.ListerWatcher {
-	return &cache.ListWatch{
-		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
-			opts.FieldSelector = fieldSelector
-			return dynamicClient.Resource(schema.GroupVersionResource{
-				Group:    "scheduling.sigs.k8s.io",
-				Version:  "v1beta1",
-				Resource: "elasticquotatrees",
-			}).Namespace(ns).List(context.TODO(), opts)
-		},
-		WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
-			opts.FieldSelector = fieldSelector
-			return dynamicClient.Resource(schema.GroupVersionResource{
-				Group:    "scheduling.sigs.k8s.io",
-				Version:  "v1beta1",
-				Resource: "elasticquotatrees",
-			}).Namespace(ns).Watch(context.TODO(), opts)
-		},
 	}
 }
 

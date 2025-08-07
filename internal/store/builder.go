@@ -39,7 +39,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/client-go/dynamic"
 	clientset "k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
@@ -220,6 +219,10 @@ func (b *Builder) WithCustomResourceStoreFactories(fs ...customresource.Registry
 			klog.InfoS("Updating store", "GVR", gvrString)
 		}
 		availableStores[gvrString] = func(b *Builder) []cache.Store {
+			if b.buildCustomResourceStoresFunc == nil {
+				klog.InfoS("Custom resource stores function is not initialized", "resourceName", f.Name())
+				return []cache.Store{}
+			}
 			return b.buildCustomResourceStoresFunc(
 				f.Name(),
 				f.MetricFamilyGenerators(),
@@ -324,14 +327,29 @@ func (b *Builder) BuildStores() [][]cache.Store {
 }
 
 var availableStores = map[string]func(f *Builder) []cache.Store{
-	"certificatesigningrequests":      func(b *Builder) []cache.Store { return b.buildCsrStores() },
-	"clusterroles":                    func(b *Builder) []cache.Store { return b.buildClusterRoleStores() },
-	"configmaps":                      func(b *Builder) []cache.Store { return b.buildConfigMapStores() },
-	"clusterrolebindings":             func(b *Builder) []cache.Store { return b.buildClusterRoleBindingStores() },
-	"cronjobs":                        func(b *Builder) []cache.Store { return b.buildCronJobStores() },
-	"daemonsets":                      func(b *Builder) []cache.Store { return b.buildDaemonSetStores() },
-	"deployments":                     func(b *Builder) []cache.Store { return b.buildDeploymentStores() },
-	"elasticquotatrees":               func(b *Builder) []cache.Store { return b.buildElasticQuotaTreeStores() },
+	"certificatesigningrequests": func(b *Builder) []cache.Store { return b.buildCsrStores() },
+	"clusterroles":               func(b *Builder) []cache.Store { return b.buildClusterRoleStores() },
+	"configmaps":                 func(b *Builder) []cache.Store { return b.buildConfigMapStores() },
+	"clusterrolebindings":        func(b *Builder) []cache.Store { return b.buildClusterRoleBindingStores() },
+	"cronjobs":                   func(b *Builder) []cache.Store { return b.buildCronJobStores() },
+	"daemonsets":                 func(b *Builder) []cache.Store { return b.buildDaemonSetStores() },
+	"deployments":                func(b *Builder) []cache.Store { return b.buildDeploymentStores() },
+	"elasticquotatrees": func(b *Builder) []cache.Store {
+		// 使用注册工厂的方式
+		factory := &ElasticQuotaTreeFactory{}
+		if b.buildCustomResourceStoresFunc == nil {
+			klog.InfoS("Custom resource stores function is not initialized", "resourceName", factory.Name())
+			return []cache.Store{}
+		}
+		return b.buildCustomResourceStoresFunc(
+			factory.Name(),
+			factory.MetricFamilyGenerators(),
+			factory.ExpectedType(),
+			factory.ListWatch,
+			b.useAPIServerCache,
+			b.objectLimit,
+		)
+	},
 	"endpoints":                       func(b *Builder) []cache.Store { return b.buildEndpointsStores() },
 	"endpointslices":                  func(b *Builder) []cache.Store { return b.buildEndpointSlicesStores() },
 	"horizontalpodautoscalers":        func(b *Builder) []cache.Store { return b.buildHPAStores() },
@@ -389,13 +407,6 @@ func (b *Builder) buildDaemonSetStores() []cache.Store {
 
 func (b *Builder) buildDeploymentStores() []cache.Store {
 	return b.buildStoresFunc(deploymentMetricFamilies(b.allowAnnotationsList["deployments"], b.allowLabelsList["deployments"]), &appsv1.Deployment{}, createDeploymentListWatch, b.useAPIServerCache, b.objectLimit)
-}
-
-func (b *Builder) buildElasticQuotaTreeStores() []cache.Store {
-	return b.buildCustomResourceStores("elasticquotatrees", elasticQuotaTreeMetricFamilies(b.allowAnnotationsList["elasticquotatrees"], b.allowLabelsList["elasticquotatrees"]), &unstructured.Unstructured{}, func(customResourceClient interface{}, ns string, fieldSelector string) cache.ListerWatcher {
-		dynamicClient := customResourceClient.(dynamic.Interface)
-		return createElasticQuotaTreeListWatch(dynamicClient, ns, fieldSelector)
-	}, b.useAPIServerCache, b.objectLimit)
 }
 
 func (b *Builder) buildEndpointsStores() []cache.Store {
@@ -630,7 +641,13 @@ func (b *Builder) startReflector(
 	instrumentedListWatch := watch.NewInstrumentedListerWatcher(listWatcher, b.listWatchMetrics, reflect.TypeOf(expectedType).String(), useAPIServerCache, objectLimit)
 	reflector := cache.NewReflectorWithOptions(sharding.NewShardedListWatch(b.shard, b.totalShards, instrumentedListWatch), expectedType, store, cache.ReflectorOptions{ResyncPeriod: 0})
 	if cr, ok := expectedType.(*unstructured.Unstructured); ok {
-		go reflector.Run((*b.GVKToReflectorStopChanMap)[cr.GroupVersionKind().String()])
+		// Check if GVKToReflectorStopChanMap is initialized to avoid nil pointer dereference
+		if b.GVKToReflectorStopChanMap != nil {
+			go reflector.Run((*b.GVKToReflectorStopChanMap)[cr.GroupVersionKind().String()])
+		} else {
+			// Fallback to using context if the map is not initialized
+			go reflector.Run(b.ctx.Done())
+		}
 	} else {
 		go reflector.Run(b.ctx.Done())
 	}
