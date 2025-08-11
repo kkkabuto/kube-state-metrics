@@ -314,22 +314,30 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 		currentPath = parentPath + "/" + node.Name
 	}
 
-	// 添加队列信息指标
-	metrics = append(metrics, &metric.Metric{
-		LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-		LabelValues: []string{node.Name, currentPath, parentPath},
-		Value:       1,
-	})
+	// 获取直接父节点名称
+	parentQueue := ""
+	if parentPath != "" {
+		// 分割路径并获取最后一个元素作为直接父节点名称
+		parts := strings.Split(parentPath, "/")
+		parentQueue = parts[len(parts)-1]
+	}
 
 	// 根据指标类型添加相应的资源指标
 	switch metricType {
+	case "info":
+		// 添加队列信息指标
+		metrics = append(metrics, &metric.Metric{
+			LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
+			LabelValues: []string{node.Name, currentPath, parentQueue},
+			Value:       1,
+		})
 	case "spec_max_cpu":
 		if cpu, found := node.Max["cpu"]; found {
 			if cpuStr, ok := cpu.(string); ok {
 				if cpuValue, err := parseResourceValue(cpuStr); err == nil {
 					metrics = append(metrics, &metric.Metric{
 						LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-						LabelValues: []string{node.Name, currentPath, parentPath},
+						LabelValues: []string{node.Name, currentPath, parentQueue},
 						Value:       cpuValue,
 					})
 				}
@@ -341,7 +349,7 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 				if memoryValue, err := parseMemoryValue(memoryStr); err == nil {
 					metrics = append(metrics, &metric.Metric{
 						LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-						LabelValues: []string{node.Name, currentPath, parentPath},
+						LabelValues: []string{node.Name, currentPath, parentQueue},
 						Value:       memoryValue,
 					})
 				}
@@ -353,7 +361,7 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 				if cpuValue, err := parseResourceValue(cpuStr); err == nil {
 					metrics = append(metrics, &metric.Metric{
 						LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-						LabelValues: []string{node.Name, currentPath, parentPath},
+						LabelValues: []string{node.Name, currentPath, parentQueue},
 						Value:       cpuValue,
 					})
 				}
@@ -365,7 +373,7 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 				if memoryValue, err := parseMemoryValue(memoryStr); err == nil {
 					metrics = append(metrics, &metric.Metric{
 						LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-						LabelValues: []string{node.Name, currentPath, parentPath},
+						LabelValues: []string{node.Name, currentPath, parentQueue},
 						Value:       memoryValue,
 					})
 				}
@@ -377,7 +385,7 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 				if cpuValue, err := parseResourceValue(cpuStr); err == nil {
 					metrics = append(metrics, &metric.Metric{
 						LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-						LabelValues: []string{node.Name, currentPath, parentPath},
+						LabelValues: []string{node.Name, currentPath, parentQueue},
 						Value:       cpuValue,
 					})
 				}
@@ -389,7 +397,7 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 				if memoryValue, err := parseMemoryValue(memoryStr); err == nil {
 					metrics = append(metrics, &metric.Metric{
 						LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-						LabelValues: []string{node.Name, currentPath, parentPath},
+						LabelValues: []string{node.Name, currentPath, parentQueue},
 						Value:       memoryValue,
 					})
 				}
@@ -401,7 +409,7 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 				if cpuValue, err := parseResourceValue(cpuStr); err == nil {
 					metrics = append(metrics, &metric.Metric{
 						LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-						LabelValues: []string{node.Name, currentPath, parentPath},
+						LabelValues: []string{node.Name, currentPath, parentQueue},
 						Value:       cpuValue,
 					})
 				}
@@ -413,7 +421,7 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 				if memoryValue, err := parseMemoryValue(memoryStr); err == nil {
 					metrics = append(metrics, &metric.Metric{
 						LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-						LabelValues: []string{node.Name, currentPath, parentPath},
+						LabelValues: []string{node.Name, currentPath, parentQueue},
 						Value:       memoryValue,
 					})
 				}
@@ -425,7 +433,7 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 				if cpuValue, err := parseResourceValue(cpuStr); err == nil {
 					metrics = append(metrics, &metric.Metric{
 						LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-						LabelValues: []string{node.Name, currentPath, parentPath},
+						LabelValues: []string{node.Name, currentPath, parentQueue},
 						Value:       cpuValue,
 					})
 				}
@@ -437,7 +445,7 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 				if memoryValue, err := parseMemoryValue(memoryStr); err == nil {
 					metrics = append(metrics, &metric.Metric{
 						LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-						LabelValues: []string{node.Name, currentPath, parentPath},
+						LabelValues: []string{node.Name, currentPath, parentQueue},
 						Value:       memoryValue,
 					})
 				}
@@ -449,7 +457,7 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 				if cpuValue, err := parseResourceValue(cpuStr); err == nil {
 					metrics = append(metrics, &metric.Metric{
 						LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-						LabelValues: []string{node.Name, currentPath, parentPath},
+						LabelValues: []string{node.Name, currentPath, parentQueue},
 						Value:       cpuValue,
 					})
 				}
@@ -461,7 +469,7 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 				if memoryValue, err := parseMemoryValue(memoryStr); err == nil {
 					metrics = append(metrics, &metric.Metric{
 						LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-						LabelValues: []string{node.Name, currentPath, parentPath},
+						LabelValues: []string{node.Name, currentPath, parentQueue},
 						Value:       memoryValue,
 					})
 				}
@@ -470,7 +478,7 @@ func parseQueueTree(node queueNode, parentPath string, metrics []*metric.Metric,
 	case "namespace_count":
 		metrics = append(metrics, &metric.Metric{
 			LabelKeys:   []string{"queue_name", "queue_path", "parent_queue"},
-			LabelValues: []string{node.Name, currentPath, parentPath},
+			LabelValues: []string{node.Name, currentPath, parentQueue},
 			Value:       float64(len(node.Namespaces)),
 		})
 	}
